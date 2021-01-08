@@ -1,0 +1,411 @@
+---
+title: "Final Project"
+author: "Sidharth Bhakth, Seth Edmunds, Sha Liu"
+date: "12/1/2020"
+output: pdf_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=80), tidy=TRUE)
+
+library(RColorBrewer)
+library(MASS)
+library(scales)
+library(lubridate)
+library(tidyverse)
+library(ggthemes)
+library(data.table)
+library(patchwork)
+library(mgcv)
+
+#set default color palette
+scale_colour_discrete <- function(...) {
+  scale_color_brewer(palette = "Set2")
+}
+```
+
+```{r}
+kansas_dat <- fread(file = "data/kansas_dat.csv")
+
+test_dat_ks <- kansas_dat %>%
+  filter(date >= as.Date("2020-03-14")) %>%
+  group_by(Mandate, date) %>%
+  summarise(
+    Mandate = as.factor(Mandate),
+    mean = mean(mean),
+    m50 = mean(m50),
+    mean_index = mean(m50_index),
+    date = as.Date(date)
+  )
+```
+# Report 			
+
+## Introduction
+
+We have been told that wearing face masks in public spaces reduces the spread of  COVID-19. We are wondering how much of it can impact the spread. In this report, we explore the relationship between COVID-19 effective reproduction number and mobility under the mask intervention on July 3rd for Kansas. Our idea is inspired by the published CDC paper named “Trends in County-Level COVID-19 Incidence in Counties With and Without a Mask Mandate — Kansas, June 1–August 23, 2020” on November 20, 2020. The paper concluded that masks are an important intervention for mitigating the transmission of COVID-19, and countywide mask mandates appear to have contributed to the mitigation of COVID-19 spread in Kansas counties that had them in place.$^1$ We want to explore the data with mobility taking into consideration. We also want to use effective reproduction numbers instead of confirmed cases.
+
+## Statement of Goals
+
+We are trying to address the question of whether a government mandate to wear face masks in public spaces reduces the effective reproduction numbers of COVID-19 when controlling for mobility.
+
+## Why do we care?
+
+CDC has reported that countywide mask mandates are effective interventions for reducing COVID-19 transmission in a community.$^1$ Given that masking has been shown to reduce transmission via reduction in respiratory aerosol droplets, it would probably be a safe assumption that mandated wearing of masks in a community does play a significant role in the reduction of COVID-19 transmission.$^2$ However, simply wearing a mask is only part of the overall strategy to reduce transmission. We want to know how a statewide optional mask mandate intervention impacts the effective reproduction numbers of COVID-19 between counties that opted into the mask mandate and those that didn’t. We also explored how mobility may have had more significant influence on the increase or decrease of COVID-19 transmission in the counties.
+
+## Why should you care?
+
+In the current environment, we believe that the state policy had a significant impact on mitigating the spread of COVID-19. Higher mobility has been associated with increased effective reproduction numbers of respiratory pathogens.$^3$ Intuitively, it makes sense that people who travel and ostensibly interact more with others, will have a greater chance of spreading the infection. This may suggest that reducing mobility may be more effective than introducing a mask mandate.
+
+## Description of our data
+
+The governor of Kansas issued an executive order requiring wearing masks in public spaces, effective July 3, 2020, which was subject to county authority to opt out. After July 3, COVID-19 incidence decreased in 24 counties with mask mandates but continued to increase in 81 counties without mask mandates. In order to analyze the transmission trend, we gathered COVID-19 Case surveillance data and mobility data, and we calculated the effective reproduction numbers.
+
+## COVID-19 Case surveillance data
+
+We utilized the USAFacts COVID-19 county level case report data, which is a widely used data source for COVID-19 modeling that has been seen in various CDC publications along with many of the models contained in the CDC case forecasting ensemble model. 
+
+## Mobility Data
+
+We used daily and county level Google mobility from the GitHub repository.$^4$ Below are the variables description of Mobility Dataset: 
+
+  * `fips`: a standard geographic identifier to identify states and counties in the United States
+  * `m50`: a daily median of sampled maximum travel distance per region via cell phone locations 
+  * `m50_index`: the percent of normal m50 in the region, with baseline defined as the m50 during 2020-02-17 to 2020-03-07.
+
+## Effective Reproduction Number Calculations
+
+The effective reproduction number, R(t), indicates the average number of secondary infections expected from a single COVID-19 case. We calculated the effective reproduction number utilizing the EpiEstim R library.$^5$ These R(t) values determine the potential for epidemic spread at a specific time *t* and will be able to give both a sensitive measure of the reproduction rate as well as directionality of outbreak growth trend. If R(t) is greater than 1, the outbreak will grow and the virus will spread quickly. When R(t) is less than 1, the outbreak will diminish.
+
+## Data Analysis
+
+In Figure 1, we have shown the relationship between R(t) and dates stratified by county level mask mandates in order to discern differing trends of disease transmission. We used the mean of R(t) of each set of counties as our response variable. For both sets of counties in Kansas, from April to the end of June, R(t) increases and it hits the peak in late June. R(t) started to decrease till August, then it increased again in September, then it slowly went down till November. We add the dashed line to show the effective mask mandate date, which is July 3rd. We see the effective date is after the R(t) started decreasing, which indicates that mask mandate could not be the main driver of decreasing R(t). Before July 3rd, we see that state mask mandate counties have higher R(t) value than non-mask mandate counties. After July 3rd, we see the trend flips and state mask mandate counties have lower R(t) value than non-mask mandate counties. We believe that this is not due to the effect of mask mandate policy, as then the policy was optional for each county to adopt or not to adopt. In order to prove our point, we added mobility data into our model as we believe mobility is the main driver of R(t) instead of mask mandate intervention.
+
+
+### Figure 1
+```{r}
+k1 <-
+  ggplot(data = kansas_dat,
+         aes(y = mean,
+             x = date,
+             color = Mandate)) +
+  geom_point(size = 1.1, alpha = .1) +
+  stat_smooth(method = "gam",
+              se = FALSE) +
+  geom_vline(aes(xintercept = as.Date("2020-07-03")),
+             color = "black",
+             linetype = "dashed") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  annotate(
+    "text",
+    x = as.Date("2020-07-04"),
+    y = .7,
+    label = "State mask mandate, \n effective July 3",
+    size = 3,
+    hjust = 0
+  ) +
+  labs(
+    y = "Mean Effective Reproduction Number R(t)",
+    x = "",
+    title = "COVID-19 transmission trends in counties with and without a mask \nmandate — Kansas, March 14–November 30, 2020",
+    color = "",
+    caption = "Data from https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv
+                         https://raw.githubusercontent.com/descarteslabs/DL-COVID-19/master/DL-us-mobility-daterow.csv"
+  )
+
+k1
+```
+To further explore the relationship between mobility and mask mandate intervention, we calculated the mean of `m50` to get the mean of mobility of mask mandate and non-mask mandated counties. In Figure 2, we can see that there is a clear difference in the mean of mobility `m50` across the mask and non-mask mandated counties. The non-mask mandated counties have a significantly higher mean mobility relative to the mask-mandated counties. When Kansas issued an executive order requiring wearing masks in public spaces, effective July 3, 2020, we see that both groups of counties have the same reduction in the mean of mobility values with an eventual rebound in October.
+
+### Figure 2
+```{r}
+ggplot(test_dat_ks) +
+  geom_smooth(aes(date, 
+                  m50, 
+                  group = Mandate, 
+                  color = Mandate), 
+              se = FALSE)  +
+  geom_vline(
+    xintercept = as.Date("2020-07-03"),
+    color = "black",
+    linetype = "dashed"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  annotate(
+    "text",
+    x = as.Date("2020-07-04"),
+    y = 2.5,
+    label = "State mask mandate, \n effective July 3",
+    size = 3,
+    hjust = 0
+    
+  ) +
+  labs(
+    y = "Median mobility value",
+    x = "Date",
+    color = "",
+    title = "Median mobility during COVID-19 epidemic with and without a mask\nmandate — Kansas, March 14-November 30 2020",
+    caption = "Data from https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv
+                         https://raw.githubusercontent.com/descarteslabs/DL-COVID-19/master/DL-us-mobility-daterow.csv"
+  )
+```
+
+We are also interested in exploring the relationship between mobility reduction from baseline and mask mandate intervention, we calculated the mean of `m50_index` to get the mean of mobility reduction from baseline of mask mandate and non-mask mandated counties.  Looking at mobility reduction from baseline in Figure 3, almost the same reduction from baseline was seen in both groups of counties from March to November, indicating that there was no specific intervention that reduced the median mobility between the two groups of counties, which is the same conclusion we found in Figure 2. 
+
+### Figure 3
+```{r}
+ggplot(test_dat_ks) +
+  geom_smooth(aes(date,
+                  mean_index,
+                  group = Mandate,
+                  color = Mandate),
+              se = FALSE)  +
+  geom_vline(
+    xintercept = as.Date("2020-07-03"),
+    color = "black",
+    linetype = "dashed"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  annotate(
+    "text",
+    x = as.Date("2020-07-04"),
+    y = 40,
+    label = "State mask mandate, \n effective July 3",
+    size = 3,
+    hjust = 0
+  ) +
+  labs(
+    y = expression("Median mobility index value"),
+    x = "Date",
+    color = "",
+    title = "Median mobility index during COVID-19 epidemic with and without a mask \nmandate — Kansas, March 14-November 30 2020",
+    caption = "Data from https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv
+                         https://raw.githubusercontent.com/descarteslabs/DL-COVID-19/master/DL-us-mobility-daterow.csv"
+  )
+```
+
+## Build a Model
+
+Our hypothesis is that mobility will significantly influence the effective reproduction number of COVID-19 even with the mask intervention.
+
+In order to minimize the outliers within the data, we calculated the daily mean of R(t) for all the counties within the two mandate groups respectively. We chose GAM to model the relationship between the mean of R(t) and `m50` and `date`. GAM is a generalized linear model in which the linear response variable depends linearly on unknown smooth functions of some predictor variables, and interest focuses on inference about these smooth functions.$^6$ GAM can capture common nonlinear patterns that a classic linear model would miss. We have applied smoothing terms to the variables `m50` and `date` as they have a non-linear relationship with our response variable R(t). We have used the method Restricted Maximum Likelihood (REML) for the smoothness selection for fitting our data which is an unbiased estimator of a variance. 
+
+After building the GAM model, we wanted to assess how our model fit our data. We created a grid with six fixed `m50` values of: [0, 2, 4, 6, 8, 10]. We have tried different cuts of grid and found that this grid generates the most distinct relationship between different mobility and R(t).
+
+## Fit our Model
+
+After we fitted our model with five different median mobility values of `m50`, we have drawn the relationship between `m50` to R(t), we can see that as mobility value increases, the R(t) value increases. There is only a subtle difference in the shape of the curves between Mask-mandated counties and non-mask-mandated counties. There is a small difference in the slope of the curves between Mask-mandated counties and non-mask-mandated counties. When Kansas issued an executive order requiring wearing masks in public spaces, effective July 3, 2020, we see that mask-mandated counties have a steeper drop in R(t) than non-mask-mandated counties. Also the overall R(t) value of mask-mandated counties is smaller than non-mask-mandated counties. However, this is due to the confounding effect of when the counties are categorized into two groups with different mobility levels to start with. Refer Figure 1 for our discussion. Therefore, our model suggests that reducing mobility has a much bigger impact than introducing a mask mandate in Kansas.
+
+### Figure 4
+```{r fig.height=8, fig.width=10}
+##################
+test_dat_ks1 <-
+  test_dat_ks %>% filter(Mandate == "Mask-mandated Counties") %>% filter(date >=
+                                                                           as.Date("2020-03-14"))
+test_dat_ks2 <-
+  test_dat_ks %>% filter(Mandate == "Non-mask-mandated Counties")
+
+test_ks1 <-
+  gam(mean ~ s(m50) + s(as.numeric(date)),
+      data = test_dat_ks1,
+      method = "REML")
+test_fit_ks1 <-
+  data.frame(fitted = fitted.values(test_ks1), test_dat_ks1)
+
+test_ks2 <-
+  gam(mean ~ s(m50) + s(as.numeric(date)),
+      data = test_dat_ks2,
+      method = "REML")
+test_fit_ks2 <-
+  data.frame(fitted = fitted.values(test_ks2), test_dat_ks2)
+
+
+################
+model.grid_ks1 = expand.grid(
+  m50 = c(0, 2, 4, 6, 8, 10),
+  date = min(test_dat_ks1$date):max(test_dat_ks1$date)
+)
+
+model.pred_ks1 = predict(test_ks1, newdata = model.grid_ks1, type = "response")
+
+model.grid_ks1 = data.frame(model.grid_ks1, pred = as.vector(model.pred_ks1))
+
+m1 <-
+  ggplot(model.grid_ks1, aes(
+    x = as.Date(date, origin = "1970-01-01"),
+    y = pred,
+    color = as.factor(m50)
+  )) +
+  geom_line()  +
+  ylim(c(.3, 4.5)) +
+  geom_vline(
+    xintercept = as.Date("2020-07-03"),
+    color = "black",
+    linetype = "dashed"
+  ) +
+  theme_minimal() +
+  annotate(
+    "text",
+    x = as.Date("2020-07-04"),
+    y = .5,
+    label = "State mask mandate, \n effective July 3",
+    size = 3,
+    hjust = 0
+    
+  ) +
+  labs(
+    title = str_wrap(
+      "Estimated Mean of Effective Reproduction Number R(t) for Kansas, Faceted by County Mask Mandate Observance and Controlling for Mobility, March 14−November 30 2020",
+      100
+    ),
+    y = str_wrap("Estimated Mean Effective Reproduction Number R(t)",30),
+    x = "",
+    subtitle = "Mask-mandated counties",
+    color = "Median mobility value"
+  ) + theme(legend.position = "")
+
+#################
+model.grid_ks2 = expand.grid(
+  m50 = c(0, 2, 4, 6, 8, 10),
+  date = min(test_dat_ks2$date):max(test_dat_ks2$date)
+)
+
+model.pred_ks2 = predict(test_ks2, newdata = model.grid_ks2, type = "response")
+
+model.grid_ks2 = data.frame(model.grid_ks2, pred = as.vector(model.pred_ks2))
+
+m2 <-
+  ggplot(model.grid_ks2, aes(
+    x = as.Date(date, origin = "1970-01-01"),
+    y = pred,
+    color = as.factor(m50)
+  )) +
+  geom_line()  +
+  ylim(c(.3, 4.5)) +
+  geom_vline(
+    xintercept = as.Date("2020-07-03"),
+    color = "black",
+    linetype = "dashed"
+  ) +
+  theme_minimal() +
+  annotate(
+    "text",
+    x = as.Date("2020-07-04"),
+    y = .5,
+    label = "State mask mandate, \n effective July 3",
+    size = 3,
+    hjust = 0
+  ) +
+  labs(
+    y = str_wrap("Estimated Mean Effective Reproduction Number R(t)",30),
+    x = "Date",
+    subtitle = "Non-mask-mandated counties",
+    color = "Median mobility value",
+    caption = "Data from https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv
+                         https://raw.githubusercontent.com/descarteslabs/DL-COVID-19/master/DL-us-mobility-daterow.csv"
+  ) +
+  theme(legend.position = "bottom")
+
+m1 / m2
+```
+
+To further analyze the relationship between `m50` to R(t) and mask mandate intervention, we have also drawn the relationship between `m50` to R(t) faceted by six different mobility values, and narrowed our date to focus on the state mask intervention date July 3rd. In Figure 5, we can see that as mobility value increases, the overall R(t) value increases for both Mask-mandated counties and Non-mask-mandated counties. When Kansas issued an executive order requiring wearing masks in public spaces, effective July 3, 2020, we see that for different mobility values,  mask-mandated counties all have a steeper drop in R(t) than non-mask-mandated counties. Also the overall R(t) value of mask-mandated counties is smaller than non-mask-mandated counties. However, this is due to the confounding effect of when the counties are categorized into two groups with different mobility levels to start with. These findings match our Figure 4 shown above as well.  Therefore, our model suggests that reduced mobility had a larger impact than introducing a mask mandate in Kansas.
+
+### Figure 5
+```{r fig.height=6, fig.width=12}
+ggplot() +
+  geom_line(
+    data = model.grid_ks1 %>% mutate(`Median mobility` = as.factor(m50)),
+    aes(
+      x = as.Date(date, origin = "1970-01-01"),
+      y = pred,
+      color = "mediumseagreen"
+    )
+  )  +
+  geom_line(
+    data = model.grid_ks2 %>% mutate(`Median mobility` = as.factor(m50)),
+    aes(
+      x = as.Date(date, origin = "1970-01-01"),
+      y = pred,
+      color = "tomato1"
+    )
+  )  +
+  ylim(c(.3, 4)) +
+  xlim(c(as.Date("2020-07-04") - 14, as.Date("2020-07-04") + 14)) +
+  geom_vline(
+    xintercept = as.Date("2020-07-03"),
+    color = "black",
+    linetype = "dashed"
+  ) +
+  theme_minimal() +
+  annotate(
+    "text",
+    x = as.Date("2020-07-04"),
+    y = .5,
+    label = "State mask mandate, \n effective July 3",
+    size = 3,
+    hjust = 0
+    
+  ) +
+  labs(
+    title = str_wrap(
+      "Estimated Mean Reproduction Number R(t) for Kansas, Faceted by Mobility and Controlling for County Mask Mandate Obervance",
+      100
+    ),
+    y = "Estimated Mean Effective Reproduction Number R(t)",
+    x = "",
+    color = "Median mobility value",
+    caption = "Data from https://usafactsstatic.blob.core.windows.net/public/data/covid-19/covid_confirmed_usafacts.csv
+                         https://raw.githubusercontent.com/descarteslabs/DL-COVID-19/master/DL-us-mobility-daterow.csv",
+    subtitle="June 20-July 18"
+  ) +
+  facet_wrap( ~ `Median mobility`, labeller = label_both) +
+  scale_color_identity(
+    name = "",
+    breaks = c("mediumseagreen", "tomato1"),
+    labels = c("Mask-mandated counties", "Non-mask-mandated counties"),
+    guide = "legend"
+  ) +
+  theme(legend.position = "bottom")
+```
+
+
+## Conclusions					
+					 				
+  1. We observe that the effective reproduction number R(t) was trending downward before the executive order requiring wearing masks in public spaces, effective July 3, 2020 in Kansas. This raises the question of whether the intervention had an impact on reducing the transmission trend of COVID-19.
+  2. When comparing counties with a mask mandate and without a mask mandate in place, we observe that the effective reproduction number R(t) of mask-mandated counties is lower than non-mask-mandated counties. However, this is due to the confounding effect of when the counties are categorized into two groups with different mobility levels to start with.
+  3. After taking mobility data into our model, we observe that the decrease in mean of mobility `m50` has a dampening effect on the effective reproduction number R(t). The counties with a higher mobility have a higher effective reproduction number.
+
+## Limitations and Future work
+
+The COVID-19 case surveillance data represents only what is reported by states and very likely does not portray the true burden of disease in the country. Luckily, there are currently studies looking at population immunity, i.e. seroprevalence, being conducted to give a more accurate presentation of exposure and immunity but those still have their shortcomings. By utilizing the effective reproduction number as our dependent variable in our model, we have hopefully avoided a lot of the sporadic nature of case report data yet still have an up to date assessment of the current situation. The effective reproductive number of course also comes with drawbacks, namely it is still highly dependent on case incident numbers so when prevalence of COVID-19 is low, there can be large swings in the R(t) value. 
+
+There are a wide variety of other measures such as social distancing, work for home, lockdowns of businesses and etc. The mobility data has shown that it indeed does play a role in the disease transmission trend. However, we are not able to show how other variables could impact the trend of transmission. With additional data sources, we might be able to come up with more variables that could impact R(t). The mobility variable we have is measured by a random sampling of cell phones within a region, which is something of a proxy for all these other measures and as with the mask mandate, cannot be ruled as a single factor in decreasing transmission, e.g. “flattening the curve” for COVID-19. Future applications of this type of modeling should use more representative and accurate data so as to better extrapolate relationships from the model under study.
+
+## References
+
+1.	Dyke, M. E. V. Trends in County-Level COVID-19 Incidence in Counties With and Without a Mask Mandate — Kansas, June 1–August 23, 2020. MMWR Morb Mortal Wkly Rep 69, (2020).
+2.	Mahase, E. Covid-19: What is the evidence for cloth masks? BMJ 369, (2020).
+3.	Dalziel, B. D., Pourbohloul, B. & Ellner, S. P. Human mobility patterns predict divergent epidemic dynamics among cities. Proceedings. Biological Sciences 280, 20130763 (2013).
+4.	descarteslabs/DL-COVID-19. (Descartes Labs, 2020).
+5.	Thompson, R. N. et al. Improved inference of time-varying reproduction numbers during infectious disease outbreaks. Epidemics 29, 100356 (2019).
+6.	Generalized additive model. Wikipedia (2020).
+
+## Appendix
+
+### State mask mandate date by county
+
+```{r}
+kansas_dat %>% select(county, Mandate) %>%
+  mutate(Mandate = case_when(
+    Mandate == "Mask-mandated Counties" ~ as.Date("2020-07-03"),
+    TRUE ~ NA_Date_
+  )) %>%
+  distinct() %>% kableExtra::kbl(longtable = T)
+```
+
+
